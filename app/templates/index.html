@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shorts Automation</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Downloader</h1>
+        <p class="subtitle">Paste a YouTube URL to download video and captions</p>
+
+        <div class="input-group">
+            <input type="url" id="urlInput" placeholder="https://youtube.com/watch?v=..." autofocus>
+            <button id="downloadBtn">Download</button>
+        </div>
+
+        <div class="progress-area" id="progressArea">
+            <div class="spinner-ring"></div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progressFill"></div>
+            </div>
+            <p class="progress-step" id="progressStep">Processing&hellip;</p>
+        </div>
+
+        <div class="results" id="results">
+            <div class="video-card">
+                <img class="thumbnail" id="thumbnail" alt="Video thumbnail">
+                <div class="video-meta">
+                    <h2 id="videoTitle"></h2>
+                    <p class="author" id="videoAuthor"></p>
+                </div>
+            </div>
+            <div class="download-actions">
+                <a class="btn btn-video" id="videoLink" download>
+                    Download Video
+                </a>
+                <div class="caption-group">
+                    <button class="btn btn-caption" id="captionBtn">Download Captions</button>
+                    <div class="caption-dropdown" id="captionDropdown">
+                        <a class="dropdown-item" id="txtLink" download>.txt</a>
+                        <a class="dropdown-item" id="srtLink" download>.srt</a>
+                        <a class="dropdown-item" id="vttLink" download>.vtt</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="error" id="error"></div>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('urlInput');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const progressArea = document.getElementById('progressArea');
+        const progressFill = document.getElementById('progressFill');
+        const progressStep = document.getElementById('progressStep');
+        const results = document.getElementById('results');
+        const error = document.getElementById('error');
+        const thumbnail = document.getElementById('thumbnail');
+        const videoTitle = document.getElementById('videoTitle');
+        const videoAuthor = document.getElementById('videoAuthor');
+        const videoLink = document.getElementById('videoLink');
+        const txtLink = document.getElementById('txtLink');
+        const srtLink = document.getElementById('srtLink');
+        const vttLink = document.getElementById('vttLink');
+        const captionBtn = document.getElementById('captionBtn');
+        const captionDropdown = document.getElementById('captionDropdown');
+
+        let currentTaskId = null;
+
+        captionBtn.addEventListener('click', () => {
+            captionDropdown.classList.toggle('active');
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.caption-group')) {
+                captionDropdown.classList.remove('active');
+            }
+        });
+
+        downloadBtn.addEventListener('click', async () => {
+            const url = urlInput.value.trim();
+            if (!url) return;
+
+            downloadBtn.disabled = true;
+            results.classList.remove('active');
+            error.classList.remove('active');
+            progressArea.classList.add('active');
+            progressFill.style.width = '0%';
+            progressStep.textContent = 'Starting...';
+
+            try {
+                const res = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url }),
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed to start download');
+                }
+
+                const { task_id } = await res.json();
+                currentTaskId = task_id;
+
+                let poll = true;
+                while (poll) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    const statusRes = await fetch(`/api/download/${task_id}/status`);
+                    const status = await statusRes.json();
+
+                    progressFill.style.width = status.progress + '%';
+                    progressStep.textContent = status.step || 'Processing...';
+
+                    if (status.thumbnail) {
+                        thumbnail.src = status.thumbnail;
+                    }
+
+                    if (status.status === 'completed') {
+                        poll = false;
+                        videoTitle.textContent = status.title;
+                        videoAuthor.textContent = status.author;
+
+                        const filename = status.title.replace(/[<>:"/\\|?*]/g, '') || 'video';
+
+                        if (status.video_available) {
+                            videoLink.href = `/api/download/${task_id}/video`;
+                            videoLink.style.display = 'inline-flex';
+                        } else {
+                            videoLink.style.display = 'none';
+                        }
+
+                        if (status.captions_available) {
+                            txtLink.href = `/api/download/${task_id}/captions/txt`;
+                            srtLink.href = `/api/download/${task_id}/captions/srt`;
+                            vttLink.href = `/api/download/${task_id}/captions/vtt`;
+                            captionBtn.style.display = 'inline-flex';
+                        } else {
+                            captionBtn.style.display = 'none';
+                        }
+
+                        setTimeout(() => {
+                            progressArea.classList.remove('active');
+                            results.classList.add('active');
+                        }, 600);
+                    } else if (status.status === 'failed') {
+                        poll = false;
+                        progressArea.classList.remove('active');
+                        error.textContent = status.error || 'An error occurred';
+                        error.classList.add('active');
+                    }
+                }
+            } catch (err) {
+                progressArea.classList.remove('active');
+                error.textContent = err.message;
+                error.classList.add('active');
+            } finally {
+                downloadBtn.disabled = false;
+            }
+        });
+
+        urlInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') downloadBtn.click();
+        });
+    </script>
+</body>
+</html>
