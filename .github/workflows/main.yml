@@ -1,0 +1,13 @@
+- name: LeakGuard CodeGate Analyzer
+  # You may pin to the exact commit or the version.
+  # uses: vanshpatil16/VH26-DOMINATORS-5.0@83b3b0f1d38f60f9bb931ea7532f7a49c76b3fda
+  uses: vanshpatil16/VH26-DOMINATORS-5.0@v1.0.0
+  with:
+    # Files or directories to scan (default: .)
+    targets: # optional, default is .
+    # Scan only changed files against base ref (true/false)
+    changed-only: # optional, default is false
+    # Git ref to diff against when changed-only is true
+    base: # optional, default is origin/main
+    # Include ruff + CodeGate ensemble verification (true/false)
+    ensemble: # optional, default is true
